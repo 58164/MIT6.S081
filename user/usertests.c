@@ -1853,7 +1853,7 @@ dirfile(char *s)
     printf("%s: unlink dirfile/xx succeeded!\n", s);
     exit(1);
   }
-  if(link("README.md", "dirfile/xx") == 0){
+  if(link("README-ORIGINAL", "dirfile/xx") == 0){
     printf("%s: link to dirfile/xx succeeded!\n", s);
     exit(1);
   }
@@ -1893,7 +1893,7 @@ iref(char *s)
     }
 
     mkdir("");
-    link("README.md", "");
+    link("README-ORIGINAL", "");
     fd = open("", O_CREATE);
     if(fd >= 0)
       close(fd);
