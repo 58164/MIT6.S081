@@ -76,9 +76,9 @@ copyout(char *s)
   for(int ai = 0; ai < 2; ai++){
     uint64 addr = addrs[ai];
 
-    int fd = open("README", 0);
+    int fd = open("README-ORIGINAL", 0);
     if(fd < 0){
-      printf("open(README) failed\n");
+      printf("open(README-ORIGINAL) failed\n");
       exit(1);
     }
     int n = read(fd, (void*)addr, 8192);
@@ -1853,7 +1853,7 @@ dirfile(char *s)
     printf("%s: unlink dirfile/xx succeeded!\n", s);
     exit(1);
   }
-  if(link("README", "dirfile/xx") == 0){
+  if(link("README.md", "dirfile/xx") == 0){
     printf("%s: link to dirfile/xx succeeded!\n", s);
     exit(1);
   }
@@ -1893,7 +1893,7 @@ iref(char *s)
     }
 
     mkdir("");
-    link("README", "");
+    link("README.md", "");
     fd = open("", O_CREATE);
     if(fd >= 0)
       close(fd);
