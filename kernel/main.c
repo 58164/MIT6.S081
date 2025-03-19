@@ -20,8 +20,11 @@ main()
     printf("xv6 kernel is booting\n");
     printf("\n");
     kinit();         // physical page allocator
+    printf("kinit is ok\n");
     kvminit();       // create kernel page table
+    printf("kvminit is ok, magic is coming\n");
     kvminithart();   // turn on paging
+    printf("kvminithart is ok, turn on paging\n");
     procinit();      // process table
     trapinit();      // trap vectors
     trapinithart();  // install kernel trap vector
@@ -34,7 +37,7 @@ main()
 #ifdef LAB_NET
     pci_init();
     sockinit();
-#endif    
+#endif
     userinit();      // first user process
     __sync_synchronize();
     started = 1;
@@ -47,6 +50,7 @@ main()
     trapinithart();   // install kernel trap vector
     plicinithart();   // ask PLIC for device interrupts
   }
-
-  scheduler();        
+  printf("%d: all of init is ok, system entry scheduling.\n", cpuid());
+  scheduler();
+  printf("game over.\n");
 }

@@ -96,6 +96,10 @@ usertrapret(void)
   // we're back in user space, where usertrap() is correct.
   intr_off();
 
+  // 在返回用户空间前，确保使用进程的内核页表
+//  w_satp(MAKE_SATP(p->kpgtbl));
+//  sfence_vma();
+
   // send syscalls, interrupts, and exceptions to trampoline.S
   w_stvec(TRAMPOLINE + (uservec - trampoline));
 
