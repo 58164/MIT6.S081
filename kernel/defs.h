@@ -183,6 +183,7 @@ void            vminit(pagetable_t); // 把原先 kvminit() 初始化内容搬�
 int             vmmap(pagetable_t, uint64, uint64, uint64, int); // 虚拟和物理内存映射，参考 vmmap() ，入参增加了根页表
 pagetable_t     createukpgtbl(); // 全称 create user kernel page table，创建用户进程的内核页表
 void            freeukpgtbl(pagetable_t); // 把原先 kvminit() 初始化内容搬过来，并增加页表作为入参，可以为任一页表映射原内核映射的内容
+int             u2kvmcopy(char*,pagetable_t, pagetable_t, uint64, uint64); // 用户态进程内核页表和内核页表映射
 
 // plic.c
 void            plicinit(void);
@@ -194,6 +195,10 @@ void            plic_complete(int);
 void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
+
+// vmcopy.c
+int             copyin_new(pagetable_t, char *, uint64, uint64);
+int             copyinstr_new(pagetable_t, char *, uint64, uint64);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

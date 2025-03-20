@@ -22,6 +22,8 @@ void
 kvminit() {
     kernel_pagetable = (pagetable_t) kalloc();
     vminit(kernel_pagetable);
+    // CLINT
+//    vmmap(kernel_pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 }
 
 void vminit(pagetable_t pagetable) {
@@ -365,23 +367,23 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
 // Return 0 on success, -1 on error.
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
-    uint64 n, va0, pa0;
-
-    while (len > 0) {
-        va0 = PGROUNDDOWN(srcva);
-        pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
-            return -1;
-        n = PGSIZE - (srcva - va0);
-        if (n > len)
-            n = len;
-        memmove(dst, (void *) (pa0 + (srcva - va0)), n);
-
-        len -= n;
-        dst += n;
-        srcva = va0 + PGSIZE;
-    }
-    return 0;
+//    uint64 n, va0, pa0;
+//
+//    while (len > 0) {
+//        va0 = PGROUNDDOWN(srcva);
+//        pa0 = walkaddr(pagetable, va0);
+//        if (pa0 == 0)
+//            return -1;
+//        n = PGSIZE - (srcva - va0);
+//        if (n > len)
+//            n = len;
+//        memmove(dst, (void *) (pa0 + (srcva - va0)), n);
+//
+//        len -= n;
+//        dst += n;
+//        srcva = va0 + PGSIZE;
+//    }
+    return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -390,40 +392,41 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
 // Return 0 on success, -1 on error.
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
-    uint64 n, va0, pa0;
-    int got_null = 0;
-
-    while (got_null == 0 && max > 0) {
-        va0 = PGROUNDDOWN(srcva);
-        pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
-            return -1;
-        n = PGSIZE - (srcva - va0);
-        if (n > max)
-            n = max;
-
-        char *p = (char *) (pa0 + (srcva - va0));
-        while (n > 0) {
-            if (*p == '\0') {
-                *dst = '\0';
-                got_null = 1;
-                break;
-            } else {
-                *dst = *p;
-            }
-            --n;
-            --max;
-            p++;
-            dst++;
-        }
-
-        srcva = va0 + PGSIZE;
-    }
-    if (got_null) {
-        return 0;
-    } else {
-        return -1;
-    }
+//    uint64 n, va0, pa0;
+//    int got_null = 0;
+//
+//    while (got_null == 0 && max > 0) {
+//        va0 = PGROUNDDOWN(srcva);
+//        pa0 = walkaddr(pagetable, va0);
+//        if (pa0 == 0)
+//            return -1;
+//        n = PGSIZE - (srcva - va0);
+//        if (n > max)
+//            n = max;
+//
+//        char *p = (char *) (pa0 + (srcva - va0));
+//        while (n > 0) {
+//            if (*p == '\0') {
+//                *dst = '\0';
+//                got_null = 1;
+//                break;
+//            } else {
+//                *dst = *p;
+//            }
+//            --n;
+//            --max;
+//            p++;
+//            dst++;
+//        }
+//
+//        srcva = va0 + PGSIZE;
+//    }
+//    if (got_null) {
+//        return 0;
+//    } else {
+//        return -1;
+//    }
+    return copyinstr_new(pagetable, dst, srcva, max);
 }
 
 void
@@ -484,6 +487,7 @@ createukpgtbl() {
 }
 
 void freeukpgtbl(pagetable_t pagetable) {
+    printf("freeukpgtbl\n");
     // 释放三级页表占用的内存，共 3*4kb
     // 只释放页表占用内存，但不释放页表项里面的物理内存（因为是共享的）
     for(int i = 0; i < 512; i++){
@@ -504,4 +508,44 @@ void freeukpgtbl(pagetable_t pagetable) {
     }
     // level-2 page table
     kfree(pagetable);
+}
+
+// 将用户空间映射到内核页表
+// 返回0表示成功，-1表示失败
+int
+u2kvmcopy(char* name, pagetable_t upgtbl, pagetable_t kpgtbl, uint64 oldsz, uint64 newsz) {
+
+    printf("%s: u2kvmcopy, oldsz: %d, newsz: %d\n",name,oldsz,newsz);
+
+    // 确保newsz不超过PLIC地址
+    if(newsz >= PLIC)
+        return -1;
+
+    // 如果是减少映射
+    if(newsz < oldsz) {
+        // 从内核页表中移除多余的映射
+        uvmunmap(kpgtbl, newsz, (oldsz - newsz) / PGSIZE, 0);
+        return 0;
+    }
+
+    // 对齐到页边界
+    oldsz = PGROUNDUP(oldsz);
+
+    // 遍历用户页表，将每个页面映射到内核页表
+    for(uint64 va = oldsz; va < newsz; va += PGSIZE) {
+        pte_t *pte = walk(upgtbl, va, 0);
+        if(pte == 0 || (*pte & PTE_V) == 0)
+            panic("u2kvmcopy: page not present");
+
+        uint64 pa = PTE2PA(*pte);
+        int perm = PTE_FLAGS(*pte) & ~PTE_U; // 移除PTE_U标志
+
+        if(mappages(kpgtbl, va, PGSIZE, pa, perm) != 0) {
+            // 映射失败，清理已添加的映射
+            uvmunmap(kpgtbl, oldsz, (va - oldsz) / PGSIZE, 0);
+            return -1;
+        }
+    }
+
+    return 0;
 }

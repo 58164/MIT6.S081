@@ -244,6 +244,14 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
+//  struct proc *p = myproc();
+//
+//  // 如果进程有内核页表，先从内核页表中移除用户空间映射
+//  if(p && p->kpgtbl && sz > 0) {
+//    // 从内核页表中移除用户空间映射，但不释放物理内存
+//    uvmunmap(p->kpgtbl, 0, PGROUNDUP(sz)/PGSIZE, 0);
+//  }
+  
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
@@ -275,6 +283,9 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  // 将用户空间映射到内核页表
+  u2kvmcopy("user first",p->pagetable, p->kpgtbl, 0, PGSIZE);
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -296,12 +307,26 @@ growproc(int n)
   struct proc *p = myproc();
 
   sz = p->sz;
+  uint oldsz = sz;
+
+  // 检查是否会超过PLIC地址
+//  if(n > 0 && sz + n >= PLIC)
+//      return -1;
+
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
-      return -1;
+    uint64 newsz;
+    if((newsz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+        return -1;
     }
+    if(u2kvmcopy("growproc",p->pagetable, p->kpgtbl, sz,sz + n) != 0) {
+        uvmdealloc(p->pagetable, newsz, sz);
+        return -1;
+    }
+    sz = newsz;
   } else if(n < 0){
-    sz = uvmdealloc(p->pagetable, sz, sz + n);
+      sz = uvmdealloc(p->pagetable, sz, sz + n);
+      uvmunmap(p->kpgtbl, oldsz, oldsz + n, 0);
+      // 从内核页表中移除相应的映射
   }
   p->sz = sz;
   return 0;
@@ -327,6 +352,14 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
+  // 将用户空间映射到子进程的内核页表
+  if(u2kvmcopy("fork",np->pagetable, np->kpgtbl, 0, p->sz) < 0) {
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+  }
+
   np->sz = p->sz;
 
   np->parent = p;
