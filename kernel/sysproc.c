@@ -41,15 +41,11 @@ sys_wait(void)
 uint64
 sys_sbrk(void)
 {
-
   int addr;
   int n;
-  struct proc *p = myproc();
 
   if(argint(0, &n) < 0)
     return -1;
-
-  printf("sys_sbrk: pid=%d, name=%s, n=%d, current_sz=%d\n", p->pid, p->name, n, p->sz);  
   addr = myproc()->sz;
   if(growproc(n) < 0)
     return -1;

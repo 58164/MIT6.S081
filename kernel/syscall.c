@@ -137,9 +137,6 @@ syscall(void)
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    if(num == SYS_sbrk) {
-      printf("syscall: sbrk called by pid=%d, name=%s\n", p->pid, p->name);
-    }
     p->trapframe->a0 = syscalls[num]();
   } else {
     printf("%d %s: unknown sys call %d\n",
