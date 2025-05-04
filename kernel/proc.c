@@ -150,6 +150,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->systrace = 0;
 }
 
 // Create a user page table for a given process,
@@ -276,6 +277,8 @@ fork(void)
   np->sz = p->sz;
 
   np->parent = p;
+
+  np->systrace = p->systrace;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
