@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -101,5 +102,22 @@ sys_trace(void) {
     int mask;
     argint(0, &mask);
     myproc()->systrace = mask;
+    return 0;
+}
+
+uint64 sys_sysinfo(void) {
+    uint64 addr;
+
+    // 从 参数寄存器a0 读取用户传入地址
+    if(argaddr(0, &addr) < 0)
+        return -1;
+
+    struct sysinfo s;
+    s.freemem = kFreeMemNum();
+    s.nproc = kProcCnt();
+
+    // copyout 从 s 处的 sizeof(s) 字节拷贝到 指定页表的虚拟内存 addr处
+    if(copyout(myproc()->pagetable, addr, (char *)&s, sizeof(s)) < 0)
+        return -1;
     return 0;
 }

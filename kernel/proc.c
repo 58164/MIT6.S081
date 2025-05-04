@@ -696,3 +696,13 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+uint64 kProcCnt(void) {
+    struct proc *p;
+    uint64 res = 0;
+    for (p = proc; p < &proc[NPROC]; p++) {
+      res += p->state != UNUSED ? 1 : 0;
+    }
+    return res;
+}
