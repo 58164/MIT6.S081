@@ -122,8 +122,8 @@ found:
     return 0;
   }
 
-  // 为进程分配内核页表
-  if((p->kpgtbl = createukpgtbl()) == 0){
+  // create kernal pgt for process
+  if((p->kpgtbl = createUsrpgt()) == 0){
       freeproc(p);
       release(&p->lock);
       return 0;
@@ -191,7 +191,7 @@ freeproc(struct proc *p)
 
   // 释放进程的内核页表
   if(p->kpgtbl)
-      freeukpgtbl(p->kpgtbl);
+      freeUsrpgt(p->kpgtbl);
   p->kpgtbl = 0;
 
   p->kstack = 0;
@@ -275,7 +275,7 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
-  // 首个用户空间进程，将用户空间页表映射到内核页表
+  // first user process map user pgt to kernal pgt
   if (u2kvmcopy(p->pagetable, p->kpgtbl, 0, PGSIZE) < 0)
     panic("userinit: u2kvmcopy");
 
@@ -293,15 +293,14 @@ userinit(void)
 
 // Grow or shrink user memory by n bytes.
 // Return 0 on success, -1 on failure.
-int
-growproc(int n)
+int growproc(int n)
 {
   uint sz;
   struct proc *p = myproc();
 
   sz = p->sz;
 
-  // 检查是否会超过 PLIC 的地址
+  // can't exceed PLIC
   if(n > 0 && sz + n >= PLIC)
       return -1;
 
@@ -311,11 +310,11 @@ growproc(int n)
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
-    // n>0，申请增加内存，我们这里在等扩容成功以后，把新增加的内存映射到用户内核页表
+    // add new memory mapping to kpgtbl after malloc
     u2kvmcopy(p->pagetable, p->kpgtbl, PGROUNDUP(oldsz), sz);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
-    // 同上，释放内存以后同步映射
+    // likewise, remove map after free
     uvmunmap(p->kpgtbl, PGROUNDUP(sz), (PGROUNDUP(oldsz) - PGROUNDUP(sz)) / PGSIZE, 0);
   }
   p->sz = sz;
@@ -324,8 +323,7 @@ growproc(int n)
 
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
-int
-fork(void)
+int fork(void)
 {
   int i, pid;
   struct proc *np;
@@ -344,8 +342,7 @@ fork(void)
   }
   np->sz = p->sz;
 
-  // 上一步已经父进程的页表和物理内存都复制到新的子进程
-  // 这里需要把新的子进程的页表，复制到用户的内核页表
+  // copy pgt of np to user kernal pgt
   if (u2kvmcopy(np->pagetable, np->kpgtbl, 0, np->sz) < 0) {
       freeproc(np);
       release(&np->lock);

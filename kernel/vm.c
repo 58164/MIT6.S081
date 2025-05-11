@@ -35,7 +35,6 @@ void vminit(pagetable_t pagetable) {
 
     if (pagetable == kernel_pagetable) {
         // CLINT
-        // 只有内核页表配享太庙 for fix the remap error
         vmmap(pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
     }
 
@@ -434,30 +433,22 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
 void
 vmprint_recursive(pagetable_t pagetable, int level) {
 
-    // 按照 xv6-book 书上的规则，三级页表名称，从高地址到低地址（从左到右）依次排列为：L2（又称顶级/根页表）、L1、L0
     static int levels[] = {0, 2, 1, 0};
 
-    // 每个 PTE 占用 8 字节，共 512 个 PTE
     for (int i = 0; i < PGSIZE / 8; i++) {
         pte_t pte = pagetable[i];
-        // 只处理有效的 PTE
         if (pte & PTE_V) {
-            // 打印缩进
             for (int j = 0; j < level; j++)
                 printf(" ..");
 
-            // 打印 PTE 的下标值，和其对应的物理地址
             uint64 pa = PTE2PA(pte);
             printf("%d: pte %p pa %p\n", i, pte, pa);
 
-            // 额外打印，证明在 xv6 中，第二级和第一级页表的 PTE 都是指向下一级页表的地址，只有最后一个页表的 PTE 指向的是物理内存地址
             printf("level= %d, is it pgtbl? %s\n", levels[level], ((pte & (PTE_R | PTE_W | PTE_X)) == 0) ? "true" : "false");
 
-            // 如果这个 PTE 指向的是下一级页表，递归打印
             if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
-                // 这是一个指向下一级页表的 PTE
                 vmprint_recursive((pagetable_t) pa, level + 1);
-            } // xv6 中无需考虑第二级和第一级页表项指向物理地址的情况
+            }
         }
     }
 }
@@ -480,25 +471,19 @@ vmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm) {
     return 0;
 }
 
-// 创建一个用户进程的内核页表并完成初始化工作
-pagetable_t
-createukpgtbl() {
+// create user kernal pgt
+pagetable_t createUsrpgt() {
     pagetable_t ukpgtbl = (pagetable_t) kalloc();
     vminit(ukpgtbl);
     return ukpgtbl;
 }
 
-void freeukpgtbl(pagetable_t pagetable) {
-    // 释放三级页表占用的内存，共 3*4kb
-    // 只释放页表占用内存，但不释放页表项里面的物理内存（因为是共享的）
+void freeUsrpgt(pagetable_t pagetable) {
     for(int i = 0; i < 512; i++){
-        // level-1 page table entry
         pte_t l1pte = pagetable[i];
         if((l1pte & PTE_V) && (l1pte & (PTE_R|PTE_W|PTE_X)) == 0){
             uint64 l1ptepa = PTE2PA(l1pte);
-            // 释放最后一级页表项
             for(int j = 0; j < 512; j++){
-                // level-0 page table entry
                 pte_t l0pte = ((pagetable_t)l1ptepa)[j];
                 if((l0pte & PTE_V) && (l0pte & (PTE_R|PTE_W|PTE_X)) == 0){
                     kfree((void*)PTE2PA(l0pte));
@@ -511,8 +496,7 @@ void freeukpgtbl(pagetable_t pagetable) {
     kfree(pagetable);
 }
 
-int
-u2kvmcopy(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 begin, uint64 end)
+int u2kvmcopy(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 begin, uint64 end)
 {
     pte_t *pte;
     uint64 pa, i;
@@ -522,9 +506,9 @@ u2kvmcopy(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 begin, uint64 end)
         if((pte = walk(upgtbl, i, 0)) == 0)
             panic("uvmmap_copy: pte should exist");
         if((*pte & PTE_V) == 0)
-            panic("uvmmap_copy: page not present");
+            panic("uvmmap_copy: page not valid");
         pa = PTE2PA(*pte);
-        // 映射的时候需要去除页表项中的 PTE_U 标志
+        // unset PTE_U because dest is kernal
         flags = PTE_FLAGS(*pte) & (~PTE_U);
         if(mappages(kpgtbl, i, PGSIZE, pa, flags) != 0){
             uvmunmap(kpgtbl, 0, i / PGSIZE, 0);

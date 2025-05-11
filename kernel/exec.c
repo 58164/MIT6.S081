@@ -9,8 +9,7 @@
 
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 
-int
-exec(char *path, char **argv)
+int exec(char *path, char **argv)
 {
   char *s, *last;
   int i, off;
@@ -108,9 +107,9 @@ exec(char *path, char **argv)
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
 
-  // 先取消旧的映射内容
+  // remove the former mappings 
   uvmunmap(p->kpgtbl, 0, PGROUNDUP(oldsz) / PGSIZE, 0);
-  // 将新的用户空间的页表内容拷贝到内核页表中
+  // copy the new pgt to kernal pgt
   if (u2kvmcopy(pagetable, p->kpgtbl, 0, sz) < 0) {
       goto bad;
   }
@@ -123,7 +122,7 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
-  // 在 return argc; 之前添加
+  // add before return argc
   if(p->pid==1) vmprint(p->pagetable);
 
   return argc; // this ends up in a0, the first argument to main(argc, argv)
