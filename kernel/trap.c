@@ -77,8 +77,24 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+    ++ p->ticks_cnt;    // ticks inc 1
+    // reach alarm interval and alarm handler not on
+    if (p->ticks_cnt >= p->alarm_interval && p->alarm_on == 0) {
+        p->ticks_cnt = 0;
+        p->alarm_on = 1;
+        
+        // alloc space to store context when first call
+        if(p->alarm_trapframe == 0)
+          p->alarm_trapframe = kalloc();
+        // store the proc context
+        *p->alarm_trapframe = *p->trapframe;
+        
+        // pc points to handler
+        p->trapframe->epc = (uint64)p->alarm_handler;
+    }
     yield();
+  }
 
   usertrapret();
 }
